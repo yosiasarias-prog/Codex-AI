@@ -6,6 +6,17 @@
   <title>Felicitación de Cumpleaños #17</title>
   <style>
     :root {
+      --sky-top: #0d2342;
+      --sky-bottom: #020814;
+      --accent: #ffe66d;
+      --frame-border: rgba(255, 255, 255, 0.18);
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: geometricPrecision;
+    }
       --bg-1: #071327;
       --bg-2: #17345e;
       --text: #ffe66d;
@@ -18,6 +29,35 @@
       min-height: 100vh;
       display: grid;
       place-items: center;
+      background:
+        radial-gradient(circle at 12% 10%, rgba(49, 90, 142, 0.45), transparent 40%),
+        radial-gradient(circle at 80% 0%, rgba(32, 68, 108, 0.5), transparent 35%),
+        linear-gradient(180deg, var(--sky-top), var(--sky-bottom));
+      font-family: "Segoe UI", Inter, system-ui, sans-serif;
+      color: #fff;
+      padding: 1rem;
+    }
+
+    .stage {
+      width: min(1180px, 98vw);
+      position: relative;
+      border-radius: 20px;
+      overflow: hidden;
+      border: 1px solid var(--frame-border);
+      box-shadow:
+        0 28px 75px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      isolation: isolate;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: linear-gradient(180deg, #0b1a33 0 63%, #225a24 63% 100%);
+    }
+
+    .title-overlay {
       background: radial-gradient(circle at 50% 10%, #2d5487, var(--bg-1) 70%);
       font-family: "Segoe UI", Tahoma, sans-serif;
       color: white;
@@ -44,6 +84,15 @@
       inset: 0;
       display: grid;
       place-items: center;
+      pointer-events: none;
+      opacity: 0;
+      transform: scale(0.88);
+      transition: transform 700ms cubic-bezier(.2,.88,.2,1), opacity 700ms ease;
+      background: radial-gradient(circle at center, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.08) 45%, transparent 70%);
+      padding: 1rem;
+    }
+
+    .title-overlay.show {
       text-align: center;
       font-size: clamp(1.7rem, 5vw, 3.4rem);
       font-weight: 800;
@@ -63,6 +112,30 @@
       transform: scale(1);
     }
 
+    .title-overlay h1 {
+      margin: 0;
+      text-align: center;
+      line-height: 1.1;
+      font-size: clamp(1.85rem, 5vw, 4rem);
+      letter-spacing: 0.02em;
+      font-weight: 900;
+      color: var(--accent);
+      text-shadow:
+        0 6px 22px rgba(0, 0, 0, 0.62),
+        0 0 20px rgba(255, 230, 109, 0.35);
+    }
+
+    .subtitle {
+      position: absolute;
+      left: 16px;
+      bottom: 12px;
+      padding: 0.3rem 0.55rem;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      letter-spacing: 0.01em;
+      background: rgba(0, 0, 0, 0.35);
+      opacity: 0.88;
+      pointer-events: none;
     .hint {
       position: absolute;
       left: 14px;
@@ -76,6 +149,70 @@
   </style>
 </head>
 <body>
+  <div class="stage">
+    <canvas id="scene" width="1180" height="640" aria-label="Felicitación de cumpleaños animada"></canvas>
+    <div id="titleOverlay" class="title-overlay">
+      <h1>Feliz Cumpleaños #17 mi negrito</h1>
+    </div>
+    <div class="subtitle">Animación realista en Canvas • Bateo + vidrio roto + mensaje</div>
+  </div>
+
+  <script>
+    /**
+     * Animación profesional de cumpleaños en 2D Canvas:
+     * 1) pelotero espera
+     * 2) swing del bate
+     * 3) contacto y vuelo de pelota
+     * 4) impacto y rotura de vidrio
+     * 5) mensaje final y reinicio
+     */
+
+    const canvas = document.getElementById("scene");
+    const ctx = canvas.getContext("2d");
+    const titleOverlay = document.getElementById("titleOverlay");
+
+    // ---------- Utilidades ----------
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+    const easeInOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+
+    // ---------- Configuración de escena ----------
+    const scene = {
+      groundY: 420,
+      glass: {
+        x: 860,
+        y: 125,
+        w: 230,
+        h: 320,
+        broken: false,
+        impactX: 0,
+        impactY: 0,
+        cracks: [],
+        shards: []
+      },
+      dust: []
+    };
+
+    const player = {
+      x: 280,
+      y: scene.groundY,
+      shoulderX: 316,
+      shoulderY: 292,
+      batPivotX: 332,
+      batPivotY: 292,
+      batAngleIdle: -1.0,
+      batAngleHit: 0.73,
+      batAngle: -1.0
+    };
+
+    const ball = {
+      x: 610,
+      y: 340,
+      r: 13,
+      vx: -68,
+      vy: 0,
+      spin: 0,
   <div class="scene">
     <canvas id="birthdayCanvas" width="960" height="540" aria-label="Animación de cumpleaños"></canvas>
     <div id="birthdayMessage" class="message">Feliz Cumpleaños #17 mi negrito</div>
@@ -108,6 +245,71 @@
       trail: []
     };
 
+    const state = {
+      phase: "approach", // approach -> swing -> flight -> shattered -> done
+      time: 0,
+      phaseTime: 0,
+      messageVisible: false
+    };
+
+    function resetAnimation() {
+      state.phase = "approach";
+      state.time = 0;
+      state.phaseTime = 0;
+      state.messageVisible = false;
+
+      titleOverlay.classList.remove("show");
+
+      player.batAngle = player.batAngleIdle;
+
+      ball.x = 610;
+      ball.y = 340;
+      ball.vx = -68;
+      ball.vy = 0;
+      ball.spin = 0;
+      ball.hit = false;
+      ball.trail.length = 0;
+
+      scene.glass.broken = false;
+      scene.glass.impactX = 0;
+      scene.glass.impactY = 0;
+      scene.glass.cracks = [];
+      scene.glass.shards = [];
+      scene.dust = [];
+    }
+
+    // ---------- Render de fondo ----------
+    function drawSkyAndStadium() {
+      // Luz general nocturna
+      const sky = ctx.createLinearGradient(0, 0, 0, scene.groundY);
+      sky.addColorStop(0, "#0e2549");
+      sky.addColorStop(0.55, "#0b1934");
+      sky.addColorStop(1, "#081224");
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, canvas.width, scene.groundY);
+
+      // Halo de reflectores
+      for (let i = 0; i < 9; i++) {
+        const lx = 75 + i * 130;
+        const ly = 78 + Math.sin(i * 1.5) * 4;
+        const glow = ctx.createRadialGradient(lx, ly, 2, lx, ly, 74);
+        glow.addColorStop(0, "rgba(255,245,215,0.62)");
+        glow.addColorStop(0.4, "rgba(255,245,215,0.20)");
+        glow.addColorStop(1, "rgba(255,245,215,0)");
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(lx, ly, 74, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Gradas
+      ctx.fillStyle = "#1a263a";
+      ctx.fillRect(0, 235, canvas.width, 120);
+
+      // Filas y columnas en gradas
+      ctx.strokeStyle = "rgba(255,255,255,0.08)";
+      ctx.lineWidth = 1;
+      for (let y = 240; y <= 350; y += 14) {
     const bat = {
       pivotX: 274,
       pivotY: 300,
@@ -173,6 +375,175 @@
         ctx.lineTo(canvas.width, y);
         ctx.stroke();
       }
+      for (let x = 0; x <= canvas.width; x += 32) {
+        ctx.beginPath();
+        ctx.moveTo(x, 235);
+        ctx.lineTo(x, 355);
+        ctx.stroke();
+      }
+
+      // Cesped con franjas
+      const grass = ctx.createLinearGradient(0, scene.groundY, 0, canvas.height);
+      grass.addColorStop(0, "#2f8431");
+      grass.addColorStop(1, "#1c4f1f");
+      ctx.fillStyle = grass;
+      ctx.fillRect(0, scene.groundY, canvas.width, canvas.height - scene.groundY);
+
+      for (let i = 0; i < 8; i++) {
+        ctx.fillStyle = i % 2 ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.03)";
+        ctx.fillRect(i * 150, scene.groundY, 150, canvas.height - scene.groundY);
+      }
+
+      // Línea de campo
+      ctx.strokeStyle = "rgba(245,245,245,0.55)";
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(0, scene.groundY);
+      ctx.lineTo(canvas.width, scene.groundY);
+      ctx.stroke();
+
+      // Mound/dirt area
+      const dirt = ctx.createRadialGradient(320, scene.groundY + 6, 5, 320, scene.groundY + 6, 92);
+      dirt.addColorStop(0, "rgba(137,98,64,0.45)");
+      dirt.addColorStop(1, "rgba(137,98,64,0)");
+      ctx.fillStyle = dirt;
+      ctx.beginPath();
+      ctx.ellipse(320, scene.groundY + 6, 95, 28, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // ---------- Render de pelotero ----------
+    function drawPlayerShadow() {
+      ctx.fillStyle = "rgba(0,0,0,0.28)";
+      ctx.beginPath();
+      ctx.ellipse(player.x + 28, scene.groundY + 16, 106, 20, 0.02, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawPlayerBody() {
+      const x = player.x;
+      const y = player.y;
+
+      // Piernas
+      ctx.strokeStyle = "#e7ecf7";
+      ctx.lineWidth = 18;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(x + 10, y - 60);
+      ctx.lineTo(x - 28, y + 28);
+      ctx.moveTo(x + 20, y - 62);
+      ctx.lineTo(x + 62, y + 24);
+      ctx.stroke();
+
+      // Calcetas
+      ctx.strokeStyle = "#c53a4f";
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(x - 22, y + 12);
+      ctx.lineTo(x - 34, y + 37);
+      ctx.moveTo(x + 55, y + 10);
+      ctx.lineTo(x + 69, y + 32);
+      ctx.stroke();
+
+      // Zapatos
+      const shoeGrad = ctx.createLinearGradient(x - 40, y + 22, x + 74, y + 38);
+      shoeGrad.addColorStop(0, "#0f1319");
+      shoeGrad.addColorStop(1, "#2c333f");
+      ctx.fillStyle = shoeGrad;
+      ctx.beginPath();
+      ctx.roundRect(x - 52, y + 24, 34, 11, 5);
+      ctx.roundRect(x + 46, y + 20, 32, 11, 5);
+      ctx.fill();
+
+      // Torso
+      const jersey = ctx.createLinearGradient(x - 30, y - 170, x + 34, y - 40);
+      jersey.addColorStop(0, "#fcfdff");
+      jersey.addColorStop(1, "#d6deef");
+      ctx.fillStyle = jersey;
+      ctx.beginPath();
+      ctx.roundRect(x - 26, y - 168, 64, 118, 18);
+      ctx.fill();
+
+      // Sombra del torso
+      ctx.fillStyle = "rgba(0,0,0,0.11)";
+      ctx.beginPath();
+      ctx.roundRect(x + 12, y - 166, 18, 112, 8);
+      ctx.fill();
+
+      // Costura roja
+      ctx.strokeStyle = "#bd2e46";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(x + 8, y - 163);
+      ctx.lineTo(x + 10, y - 56);
+      ctx.stroke();
+
+      // Cuello
+      ctx.fillStyle = "#9b6648";
+      ctx.fillRect(x - 8, y - 177, 16, 12);
+
+      // Cabeza
+      const skin = ctx.createRadialGradient(x - 8, y - 204, 2, x, y - 202, 29);
+      skin.addColorStop(0, "#f4cfb2");
+      skin.addColorStop(1, "#b67a57");
+      ctx.fillStyle = skin;
+      ctx.beginPath();
+      ctx.arc(x, y - 202, 28, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Oreja
+      ctx.fillStyle = "#be8762";
+      ctx.beginPath();
+      ctx.arc(x - 24, y - 202, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Gorra
+      const capGrad = ctx.createLinearGradient(x - 30, y - 228, x + 30, y - 188);
+      capGrad.addColorStop(0, "#b91735");
+      capGrad.addColorStop(1, "#d52949");
+      ctx.fillStyle = capGrad;
+      ctx.beginPath();
+      ctx.roundRect(x - 29, y - 224, 58, 20, 10);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.roundRect(x + 10, y - 214, 30, 8, 4);
+      ctx.fill();
+
+      // Rostro (detalles)
+      ctx.fillStyle = "#2c1f1a";
+      ctx.beginPath();
+      ctx.arc(x + 8, y - 205, 2.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#7b4d36";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(x + 5, y - 190);
+      ctx.quadraticCurveTo(x + 11, y - 186, x + 18, y - 189);
+      ctx.stroke();
+
+      // Brazos
+      ctx.strokeStyle = "#c38d6d";
+      ctx.lineWidth = 12;
+      ctx.lineCap = "round";
+
+      // Brazo frontal
+      ctx.beginPath();
+      ctx.moveTo(x + 32, y - 134);
+      ctx.lineTo(x + 68, y - 103);
+      ctx.stroke();
+
+      // Brazo posterior hacia bate
+      ctx.beginPath();
+      ctx.moveTo(x - 16, y - 135);
+      ctx.lineTo(player.batPivotX, player.batPivotY);
+      ctx.stroke();
+
+      // Guantes
+      ctx.fillStyle = "#1b2028";
+      ctx.beginPath();
+      ctx.arc(x + 70, y - 102, 7, 0, Math.PI * 2);
+      ctx.arc(player.batPivotX, player.batPivotY, 7, 0, Math.PI * 2);
+      ctx.fill();
 
       // Césped con degradado
       const grass = ctx.createLinearGradient(0, 350, 0, canvas.height);
@@ -284,6 +655,30 @@
 
     function drawBat() {
       ctx.save();
+      ctx.translate(player.batPivotX, player.batPivotY);
+      ctx.rotate(player.batAngle);
+
+      // Cuerpo del bate
+      const wood = ctx.createLinearGradient(0, 0, 158, 0);
+      wood.addColorStop(0, "#83542a");
+      wood.addColorStop(0.45, "#c8945a");
+      wood.addColorStop(0.75, "#9c6b38");
+      wood.addColorStop(1, "#7e4f24");
+      ctx.fillStyle = wood;
+      ctx.beginPath();
+      ctx.roundRect(0, -8, 158, 16, 10);
+      ctx.fill();
+
+      // Tape
+      ctx.fillStyle = "#12151a";
+      ctx.fillRect(0, -9, 25, 18);
+
+      // Brillo
+      ctx.strokeStyle = "rgba(255,255,255,0.33)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(30, -2.4);
+      ctx.lineTo(140, -2.4);
       ctx.translate(bat.pivotX, bat.pivotY);
       ctx.rotate(bat.angle);
 
@@ -312,6 +707,39 @@
       ctx.restore();
     }
 
+    function drawPlayer() {
+      drawPlayerShadow();
+      drawPlayerBody();
+      drawBat();
+    }
+
+    // ---------- Render de pelota ----------
+    function drawBallTrail() {
+      if (!ball.trail.length) return;
+      for (let i = 0; i < ball.trail.length; i++) {
+        const p = ball.trail[i];
+        const t = i / ball.trail.length;
+        ctx.fillStyle = `rgba(255,255,255,${(1 - t) * 0.24})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, lerp(ball.r * 0.8, ball.r * 0.35, t), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawBall() {
+      drawBallTrail();
+
+      // Sombra de pelota
+      ctx.fillStyle = "rgba(0,0,0,0.2)";
+      ctx.beginPath();
+      ctx.ellipse(ball.x + 5, ball.y + 7, 11, 5.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Esfera
+      const sphere = ctx.createRadialGradient(ball.x - 5, ball.y - 6, 2, ball.x, ball.y, ball.r + 3);
+      sphere.addColorStop(0, "#ffffff");
+      sphere.addColorStop(0.55, "#f2f2f2");
+      sphere.addColorStop(1, "#cfcfcf");
     function drawBall() {
       // Estela de velocidad cuando la pelota va bateada
       ball.trail.forEach((t, i) => {
@@ -337,6 +765,16 @@
       ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
       ctx.fill();
 
+      // Costuras con rotación
+      ctx.save();
+      ctx.translate(ball.x, ball.y);
+      ctx.rotate(ball.spin);
+      ctx.strokeStyle = "#b31922";
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(-3.3, 0, 5.4, -1.2, 1.2);
+      ctx.moveTo(3.3, -5.4);
+      ctx.arc(3.3, 0, 5.4, 1.9, 4.3);
       // Costuras girando
       ctx.save();
       ctx.translate(ball.x, ball.y);
@@ -351,6 +789,311 @@
       ctx.restore();
     }
 
+    // ---------- Render de vidrio ----------
+    function drawGlassPanel() {
+      const g = scene.glass;
+
+      // Marco
+      const frame = ctx.createLinearGradient(g.x, g.y, g.x + g.w, g.y + g.h);
+      frame.addColorStop(0, "rgba(233,250,255,0.95)");
+      frame.addColorStop(1, "rgba(170,223,246,0.75)");
+      ctx.strokeStyle = frame;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(g.x, g.y, g.w, g.h);
+
+      if (!g.broken) {
+        // Vidrio intacto
+        const glassFill = ctx.createLinearGradient(g.x, g.y, g.x + g.w, g.y + g.h);
+        glassFill.addColorStop(0, "rgba(169,220,240,0.20)");
+        glassFill.addColorStop(0.6, "rgba(104,159,187,0.28)");
+        glassFill.addColorStop(1, "rgba(170,229,242,0.22)");
+        ctx.fillStyle = glassFill;
+        ctx.fillRect(g.x, g.y, g.w, g.h);
+
+        // Reflejos
+        ctx.strokeStyle = "rgba(255,255,255,0.28)";
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 7; i++) {
+          ctx.beginPath();
+          ctx.moveTo(g.x + 10 + i * 30, g.y + 6);
+          ctx.lineTo(g.x + 52 + i * 30, g.y + g.h - 6);
+          ctx.stroke();
+        }
+
+        // Brillo horizontal
+        ctx.strokeStyle = "rgba(255,255,255,0.16)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(g.x + 8, g.y + g.h * 0.32);
+        ctx.lineTo(g.x + g.w - 8, g.y + g.h * 0.3);
+        ctx.stroke();
+      } else {
+        // Grietas
+        ctx.strokeStyle = "rgba(234,252,255,0.95)";
+        for (const c of g.cracks) {
+          ctx.lineWidth = c.width;
+          ctx.beginPath();
+          ctx.moveTo(c.x1, c.y1);
+          ctx.lineTo(c.x2, c.y2);
+          ctx.stroke();
+        }
+
+        // Área central rota
+        const hole = ctx.createRadialGradient(g.impactX, g.impactY, 6, g.impactX, g.impactY, 34);
+        hole.addColorStop(0, "rgba(6,10,18,0.82)");
+        hole.addColorStop(1, "rgba(6,10,18,0.35)");
+        ctx.fillStyle = hole;
+        ctx.beginPath();
+        ctx.arc(g.impactX, g.impactY, 34, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Fragmentos
+        for (const s of g.shards) {
+          ctx.save();
+          ctx.translate(s.x, s.y);
+          ctx.rotate(s.rot);
+          ctx.scale(s.scale, s.scale);
+          ctx.fillStyle = "rgba(195,243,255,0.62)";
+          ctx.beginPath();
+          ctx.moveTo(0, -s.size);
+          ctx.lineTo(s.size * 0.92, s.size * 0.42);
+          ctx.lineTo(-s.size * 0.8, s.size * 0.56);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.strokeStyle = "rgba(245,255,255,0.45)";
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+    }
+
+    function shatterGlass(x, y) {
+      const g = scene.glass;
+      g.broken = true;
+      g.impactX = x;
+      g.impactY = y;
+      g.cracks = [];
+      g.shards = [];
+
+      // Grietas radiales principales
+      const primaryCount = 18;
+      for (let i = 0; i < primaryCount; i++) {
+        const a = (Math.PI * 2 * i) / primaryCount + (Math.random() - 0.5) * 0.18;
+        const len = 56 + Math.random() * 132;
+        g.cracks.push({
+          x1: x,
+          y1: y,
+          x2: x + Math.cos(a) * len,
+          y2: y + Math.sin(a) * len,
+          width: 1.2 + Math.random() * 0.9
+        });
+      }
+
+      // Grietas secundarias
+      for (let i = 0; i < 38; i++) {
+        const base = g.cracks[(Math.random() * g.cracks.length) | 0];
+        const t = 0.28 + Math.random() * 0.6;
+        const sx = lerp(base.x1, base.x2, t);
+        const sy = lerp(base.y1, base.y2, t);
+        const a = Math.atan2(base.y2 - base.y1, base.x2 - base.x1) + (Math.random() < 0.5 ? -1 : 1) * (0.7 + Math.random() * 0.6);
+        const len = 12 + Math.random() * 36;
+
+        g.cracks.push({
+          x1: sx,
+          y1: sy,
+          x2: sx + Math.cos(a) * len,
+          y2: sy + Math.sin(a) * len,
+          width: 0.8 + Math.random() * 0.7
+        });
+      }
+
+      // Fragmentos de vidrio
+      for (let i = 0; i < 82; i++) {
+        const speed = 62 + Math.random() * 190;
+        const angle = Math.random() * Math.PI * 2;
+        g.shards.push({
+          x: x + (Math.random() - 0.5) * 40,
+          y: y + (Math.random() - 0.5) * 36,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 20,
+          size: 2.6 + Math.random() * 6.6,
+          scale: 0.8 + Math.random() * 0.8,
+          rot: Math.random() * Math.PI * 2,
+          vr: (Math.random() - 0.5) * 0.36,
+          life: 1
+        });
+      }
+
+      // Polvo/niebla breve al impacto
+      for (let i = 0; i < 26; i++) {
+        scene.dust.push({
+          x,
+          y,
+          vx: (Math.random() - 0.5) * 120,
+          vy: (Math.random() - 0.5) * 120,
+          r: 8 + Math.random() * 20,
+          alpha: 0.35 + Math.random() * 0.3
+        });
+      }
+    }
+
+    function drawDust() {
+      for (const d of scene.dust) {
+        ctx.fillStyle = `rgba(220,240,250,${d.alpha})`;
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // ---------- Física / actualización ----------
+    function updateApproach(dt) {
+      // pelota acercándose lentamente al bateador
+      ball.x += ball.vx * dt;
+
+      // micro ajuste vertical para naturalidad
+      ball.y += Math.sin(state.time * 7) * 0.2;
+
+      // inicio del swing
+      if (state.phaseTime > 1.55) {
+        state.phase = "swing";
+        state.phaseTime = 0;
+      }
+    }
+
+    function updateSwing(dt) {
+      const swingDuration = 0.56;
+      const t = clamp(state.phaseTime / swingDuration, 0, 1);
+      const eased = easeInOutCubic(t);
+      player.batAngle = lerp(player.batAngleIdle, player.batAngleHit, eased);
+
+      // instante de impacto con la pelota
+      if (!ball.hit && t > 0.46) {
+        ball.hit = true;
+        ball.vx = 385;
+        ball.vy = -168;
+        state.phase = "flight";
+        state.phaseTime = 0;
+      }
+    }
+
+    function updateBallFlight(dt) {
+      ball.x += ball.vx * dt;
+      ball.y += ball.vy * dt;
+      ball.vy += 186 * dt; // gravedad
+      ball.spin += dt * 23;
+
+      ball.trail.unshift({ x: ball.x, y: ball.y });
+      if (ball.trail.length > 14) ball.trail.pop();
+
+      const g = scene.glass;
+      const impact =
+        ball.x + ball.r >= g.x &&
+        ball.x - ball.r <= g.x + g.w &&
+        ball.y + ball.r >= g.y &&
+        ball.y - ball.r <= g.y + g.h;
+
+      if (impact && !g.broken) {
+        shatterGlass(ball.x, ball.y);
+        state.phase = "shattered";
+        state.phaseTime = 0;
+      }
+    }
+
+    function updateShattered(dt) {
+      const gravity = 238;
+
+      for (const s of scene.glass.shards) {
+        s.x += s.vx * dt;
+        s.y += s.vy * dt;
+        s.vy += gravity * dt;
+        s.rot += s.vr;
+        s.vx *= 0.997;
+        s.life -= dt * 0.45;
+      }
+
+      // limpiar fragmentos ya fuera de escena/vida
+      scene.glass.shards = scene.glass.shards.filter((s) => s.y < canvas.height + 40 && s.life > 0);
+
+      for (const d of scene.dust) {
+        d.x += d.vx * dt;
+        d.y += d.vy * dt;
+        d.vx *= 0.97;
+        d.vy *= 0.97;
+        d.r *= 0.992;
+        d.alpha *= 0.95;
+      }
+      scene.dust = scene.dust.filter((d) => d.alpha > 0.02);
+
+      // mostrar mensaje
+      if (state.phaseTime > 0.42 && !state.messageVisible) {
+        state.messageVisible = true;
+        titleOverlay.classList.add("show");
+      }
+
+      // ciclo completo -> reinicio
+      if (state.phaseTime > 4.0) {
+        resetAnimation();
+      }
+    }
+
+    function update(dt) {
+      state.time += dt;
+      state.phaseTime += dt;
+
+      if (!ball.hit) {
+        ball.spin += dt * 5;
+      }
+
+      switch (state.phase) {
+        case "approach":
+          updateApproach(dt);
+          break;
+        case "swing":
+          updateSwing(dt);
+          break;
+        case "flight":
+          updateBallFlight(dt);
+          break;
+        case "shattered":
+          updateShattered(dt);
+          break;
+      }
+
+      // Recuperación suave del bate para pose final
+      if (state.phase === "shattered") {
+        const t = clamp(state.phaseTime / 0.7, 0, 1);
+        player.batAngle = lerp(player.batAngleHit, 0.24, easeOutCubic(t));
+      }
+    }
+
+    // ---------- Render final ----------
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawSkyAndStadium();
+      drawPlayer();
+      drawGlassPanel();
+      drawDust();
+      drawBall();
+
+      // Viñeta global para contraste cinematográfico
+      const vignette = ctx.createRadialGradient(
+        canvas.width * 0.5,
+        canvas.height * 0.45,
+        120,
+        canvas.width * 0.5,
+        canvas.height * 0.45,
+        620
+      );
+      vignette.addColorStop(0, "rgba(0,0,0,0)");
+      vignette.addColorStop(1, "rgba(0,0,0,0.25)");
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // ---------- Loop ----------
     function drawGlass() {
       // Marco de la pared
       ctx.strokeStyle = "rgba(215,245,255,0.9)";
@@ -539,6 +1282,7 @@
       requestAnimationFrame(loop);
     }
 
+    resetAnimation();
     resetScene();
     requestAnimationFrame(loop);
   </script>
