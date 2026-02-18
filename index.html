@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Felicitación de Cumpleaños #17</title>
+  <style>
+    :root {
+      --bg-1: #071327;
+      --bg-2: #17345e;
+      --text: #ffe66d;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at 50% 10%, #2d5487, var(--bg-1) 70%);
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      color: white;
+    }
+
+    .scene {
+      width: min(960px, 96vw);
+      position: relative;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+
+    canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      background: linear-gradient(#0d1f3a 0 65%, #2a6f2c 65% 100%);
+    }
+
+    .message {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      font-size: clamp(1.7rem, 5vw, 3.4rem);
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: var(--text);
+      text-shadow: 0 6px 16px rgba(0, 0, 0, 0.6);
+      opacity: 0;
+      transform: scale(0.85);
+      transition: opacity 650ms ease, transform 650ms ease;
+      padding: 1rem;
+      pointer-events: none;
+      background: radial-gradient(circle, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0));
+    }
+
+    .message.show {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .hint {
+      position: absolute;
+      left: 14px;
+      bottom: 10px;
+      font-size: 0.85rem;
+      opacity: 0.85;
+      background: rgba(0, 0, 0, 0.26);
+      padding: 0.25rem 0.45rem;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="scene">
+    <canvas id="birthdayCanvas" width="960" height="540" aria-label="Animación de cumpleaños"></canvas>
+    <div id="birthdayMessage" class="message">Feliz Cumpleaños #17 mi negrito</div>
+    <div class="hint">Animación mejorada: bateo, vidrio roto y mensaje final.</div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("birthdayCanvas");
+    const ctx = canvas.getContext("2d");
+    const message = document.getElementById("birthdayMessage");
+
+    // Estado principal de la animación
+    const state = {
+      phase: "preHit", // preHit -> swing -> hit -> broken
+      elapsed: 0,
+      swingTimer: 0,
+      brokenTime: 0,
+      showMessage: false,
+      spin: 0
+    };
+
+    // Pelota con movimiento inicial y después del hit
+    const ball = {
+      x: 520,
+      y: 340,
+      r: 12,
+      vx: -55,
+      vy: 0,
+      hit: false,
+      trail: []
+    };
+
+    const bat = {
+      pivotX: 274,
+      pivotY: 300,
+      angle: -0.95
+    };
+
+    const glass = {
+      x: 700,
+      y: 130,
+      w: 190,
+      h: 260,
+      broken: false,
+      cracks: [],
+      fragments: []
+    };
+
+    function resetScene() {
+      state.phase = "preHit";
+      state.elapsed = 0;
+      state.swingTimer = 0;
+      state.brokenTime = 0;
+      state.showMessage = false;
+      state.spin = 0;
+
+      ball.x = 520;
+      ball.y = 340;
+      ball.vx = -55;
+      ball.vy = 0;
+      ball.hit = false;
+      ball.trail = [];
+
+      bat.angle = -0.95;
+
+      glass.broken = false;
+      glass.cracks = [];
+      glass.fragments = [];
+
+      message.classList.remove("show");
+    }
+
+    // Fondo del estadio con más detalle para verse menos "plano"
+    function drawBackground() {
+      // Luces de estadio
+      for (let i = 0; i < 7; i++) {
+        const lx = 80 + i * 135;
+        const ly = 85 + Math.sin(i) * 9;
+        const light = ctx.createRadialGradient(lx, ly, 2, lx, ly, 46);
+        light.addColorStop(0, "rgba(255,255,230,0.65)");
+        light.addColorStop(1, "rgba(255,255,230,0)");
+        ctx.fillStyle = light;
+        ctx.beginPath();
+        ctx.arc(lx, ly, 46, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Tribuna simple con filas
+      ctx.fillStyle = "#1a2841";
+      ctx.fillRect(0, 225, canvas.width, 85);
+      ctx.strokeStyle = "rgba(255,255,255,0.08)";
+      for (let y = 230; y <= 300; y += 12) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+
+      // Césped con degradado
+      const grass = ctx.createLinearGradient(0, 350, 0, canvas.height);
+      grass.addColorStop(0, "#2f7f31");
+      grass.addColorStop(1, "#1f5a21");
+      ctx.fillStyle = grass;
+      ctx.fillRect(0, 350, canvas.width, canvas.height - 350);
+
+      // Línea del terreno
+      ctx.strokeStyle = "rgba(255,255,255,0.35)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, 350);
+      ctx.lineTo(canvas.width, 350);
+      ctx.stroke();
+
+      // Sombra del jugador
+      ctx.fillStyle = "rgba(0,0,0,0.25)";
+      ctx.beginPath();
+      ctx.ellipse(240, 366, 84, 16, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawPlayer() {
+      const x = 235;
+      const y = 355;
+
+      // Piernas (uniforme)
+      ctx.strokeStyle = "#e4ecff";
+      ctx.lineWidth = 15;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(x + 2, y - 38);
+      ctx.lineTo(x - 28, y + 30);
+      ctx.moveTo(x + 10, y - 40);
+      ctx.lineTo(x + 44, y + 24);
+      ctx.stroke();
+
+      // Zapatos
+      ctx.fillStyle = "#0c0c0c";
+      ctx.fillRect(x - 48, y + 24, 26, 8);
+      ctx.fillRect(x + 40, y + 18, 24, 8);
+
+      // Torso con degradado
+      const jersey = ctx.createLinearGradient(x - 25, y - 145, x + 25, y - 50);
+      jersey.addColorStop(0, "#f8fbff");
+      jersey.addColorStop(1, "#d5dff3");
+      ctx.fillStyle = jersey;
+      ctx.beginPath();
+      ctx.roundRect(x - 22, y - 140, 52, 98, 13);
+      ctx.fill();
+
+      // Franja del uniforme
+      ctx.strokeStyle = "#ca2c45";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(x + 4, y - 136);
+      ctx.lineTo(x + 4, y - 45);
+      ctx.stroke();
+
+      // Cuello
+      ctx.fillStyle = "#8f5f43";
+      ctx.fillRect(x - 7, y - 145, 13, 10);
+
+      // Cabeza
+      const face = ctx.createRadialGradient(x - 6, y - 174, 2, x, y - 172, 27);
+      face.addColorStop(0, "#f6cfaf");
+      face.addColorStop(1, "#c48863");
+      ctx.fillStyle = face;
+      ctx.beginPath();
+      ctx.arc(x, y - 172, 25, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Gorra
+      ctx.fillStyle = "#c1122f";
+      ctx.beginPath();
+      ctx.roundRect(x - 24, y - 194, 50, 18, 9);
+      ctx.fill();
+      ctx.fillRect(x + 16, y - 186, 22, 7);
+
+      // Ojo y boca mínimos para más realismo
+      ctx.fillStyle = "#2a1b16";
+      ctx.beginPath();
+      ctx.arc(x + 6, y - 173, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#5f3a2a";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(x + 3, y - 161);
+      ctx.lineTo(x + 11, y - 160);
+      ctx.stroke();
+
+      // Brazo delantero
+      ctx.strokeStyle = "#c6906f";
+      ctx.lineWidth = 11;
+      ctx.beginPath();
+      ctx.moveTo(x + 26, y - 112);
+      ctx.lineTo(x + 55, y - 84);
+      ctx.stroke();
+
+      // Brazo trasero conectado al bate
+      ctx.beginPath();
+      ctx.moveTo(x - 14, y - 114);
+      ctx.lineTo(bat.pivotX, bat.pivotY);
+      ctx.stroke();
+
+      drawBat();
+    }
+
+    function drawBat() {
+      ctx.save();
+      ctx.translate(bat.pivotX, bat.pivotY);
+      ctx.rotate(bat.angle);
+
+      // Madera con degradado
+      const wood = ctx.createLinearGradient(0, 0, 126, 0);
+      wood.addColorStop(0, "#8b5d2d");
+      wood.addColorStop(0.5, "#c79253");
+      wood.addColorStop(1, "#9a6736");
+      ctx.fillStyle = wood;
+      ctx.beginPath();
+      ctx.roundRect(0, -7, 126, 14, 8);
+      ctx.fill();
+
+      // Cinta del mango
+      ctx.fillStyle = "#111";
+      ctx.fillRect(0, -8, 20, 16);
+
+      // Brillo del bate
+      ctx.strokeStyle = "rgba(255,255,255,0.25)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(26, -2);
+      ctx.lineTo(108, -2);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function drawBall() {
+      // Estela de velocidad cuando la pelota va bateada
+      ball.trail.forEach((t, i) => {
+        const alpha = i / ball.trail.length;
+        ctx.fillStyle = `rgba(255,255,255,${alpha * 0.28})`;
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, ball.r * (0.55 + alpha * 0.25), 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Sombra
+      ctx.fillStyle = "rgba(0,0,0,0.2)";
+      ctx.beginPath();
+      ctx.ellipse(ball.x + 4, ball.y + 6, 10, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Cuerpo con luz
+      const sphere = ctx.createRadialGradient(ball.x - 4, ball.y - 5, 2, ball.x, ball.y, ball.r + 2);
+      sphere.addColorStop(0, "#ffffff");
+      sphere.addColorStop(1, "#d8d8d8");
+      ctx.fillStyle = sphere;
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Costuras girando
+      ctx.save();
+      ctx.translate(ball.x, ball.y);
+      ctx.rotate(state.spin);
+      ctx.strokeStyle = "#b01d1d";
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(-3, 0, 5, -1.2, 1.2);
+      ctx.moveTo(3, -5);
+      ctx.arc(3, 0, 5, 1.9, 4.3);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawGlass() {
+      // Marco de la pared
+      ctx.strokeStyle = "rgba(215,245,255,0.9)";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(glass.x, glass.y, glass.w, glass.h);
+
+      if (!glass.broken) {
+        // Panel intacto con reflejo
+        const panel = ctx.createLinearGradient(glass.x, glass.y, glass.x + glass.w, glass.y + glass.h);
+        panel.addColorStop(0, "rgba(170,220,235,0.22)");
+        panel.addColorStop(1, "rgba(120,180,200,0.3)");
+        ctx.fillStyle = panel;
+        ctx.fillRect(glass.x, glass.y, glass.w, glass.h);
+
+        // Reflejos diagonales
+        ctx.strokeStyle = "rgba(255,255,255,0.24)";
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 5; i++) {
+          ctx.beginPath();
+          ctx.moveTo(glass.x + 12 + i * 33, glass.y + 4);
+          ctx.lineTo(glass.x + 52 + i * 33, glass.y + glass.h - 4);
+          ctx.stroke();
+        }
+      } else {
+        // Grietas
+        ctx.strokeStyle = "rgba(230,250,255,0.95)";
+        ctx.lineWidth = 1.7;
+        glass.cracks.forEach((line) => {
+          ctx.beginPath();
+          ctx.moveTo(line.x1, line.y1);
+          ctx.lineTo(line.x2, line.y2);
+          ctx.stroke();
+        });
+
+        // Hueco de impacto
+        ctx.fillStyle = "rgba(9,15,25,0.45)";
+        ctx.beginPath();
+        ctx.arc(glass.impactX, glass.impactY, 26, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Fragmentos de vidrio
+        glass.fragments.forEach((p) => {
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.fillStyle = "rgba(195,245,255,0.62)";
+          ctx.beginPath();
+          ctx.moveTo(-p.size, -p.size * 0.3);
+          ctx.lineTo(p.size, -p.size * 0.5);
+          ctx.lineTo(p.size * 0.35, p.size);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        });
+      }
+    }
+
+    function breakGlass(hitX, hitY) {
+      glass.broken = true;
+      glass.impactX = hitX;
+      glass.impactY = hitY;
+
+      // Grietas primarias
+      for (let i = 0; i < 16; i++) {
+        const a = (Math.PI * 2 * i) / 16;
+        const len = 40 + Math.random() * 105;
+        glass.cracks.push({
+          x1: hitX,
+          y1: hitY,
+          x2: hitX + Math.cos(a) * len,
+          y2: hitY + Math.sin(a) * len
+        });
+      }
+
+      // Grietas secundarias cortas
+      for (let i = 0; i < 22; i++) {
+        const base = glass.cracks[Math.floor(Math.random() * glass.cracks.length)];
+        const mx = base.x1 + (base.x2 - base.x1) * (0.3 + Math.random() * 0.5);
+        const my = base.y1 + (base.y2 - base.y1) * (0.3 + Math.random() * 0.5);
+        const a = Math.random() * Math.PI * 2;
+        const len = 16 + Math.random() * 36;
+        glass.cracks.push({
+          x1: mx,
+          y1: my,
+          x2: mx + Math.cos(a) * len,
+          y2: my + Math.sin(a) * len
+        });
+      }
+
+      // Fragmentos lanzados
+      for (let i = 0; i < 44; i++) {
+        glass.fragments.push({
+          x: hitX + (Math.random() - 0.5) * 30,
+          y: hitY + (Math.random() - 0.5) * 30,
+          vx: (Math.random() - 0.5) * 130,
+          vy: -40 + Math.random() * 170,
+          rot: Math.random() * Math.PI,
+          vr: (Math.random() - 0.5) * 0.28,
+          size: 3 + Math.random() * 7
+        });
+      }
+    }
+
+    function update(dt) {
+      state.elapsed += dt;
+      state.spin += dt * (ball.hit ? 18 : 5);
+
+      // Aproximación de la pelota antes del swing
+      if (state.phase === "preHit") {
+        ball.x += ball.vx * dt;
+        if (state.elapsed > 1.5) state.phase = "swing";
+      }
+
+      // Swing del bate
+      if (state.phase === "swing") {
+        state.swingTimer += dt;
+        const t = Math.min(state.swingTimer / 0.52, 1);
+        bat.angle = -0.95 + t * 1.65;
+
+        if (!ball.hit && t > 0.43) {
+          ball.hit = true;
+          ball.vx = 300;
+          ball.vy = -130;
+          state.phase = "hit";
+        }
+      }
+
+      // Vuelo de la pelota al vidrio
+      if (state.phase === "hit") {
+        ball.x += ball.vx * dt;
+        ball.y += ball.vy * dt;
+        ball.vy += 128 * dt;
+
+        // Estela reciente
+        ball.trail.unshift({ x: ball.x, y: ball.y });
+        if (ball.trail.length > 10) ball.trail.pop();
+
+        const impact =
+          ball.x + ball.r >= glass.x &&
+          ball.x - ball.r <= glass.x + glass.w &&
+          ball.y + ball.r >= glass.y &&
+          ball.y - ball.r <= glass.y + glass.h;
+
+        if (impact && !glass.broken) {
+          breakGlass(ball.x, ball.y);
+          state.phase = "broken";
+        }
+      }
+
+      // Caída de fragmentos y aparición del texto
+      if (state.phase === "broken") {
+        state.brokenTime += dt;
+
+        glass.fragments.forEach((p) => {
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.vy += 165 * dt;
+          p.rot += p.vr;
+        });
+
+        if (state.brokenTime > 0.42 && !state.showMessage) {
+          state.showMessage = true;
+          message.classList.add("show");
+        }
+
+        if (state.brokenTime > 3.5) {
+          resetScene();
+        }
+      }
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawBackground();
+      drawPlayer();
+      drawGlass();
+      drawBall();
+    }
+
+    let last = performance.now();
+    function loop(now) {
+      const dt = Math.min((now - last) / 1000, 0.033);
+      last = now;
+      update(dt);
+      render();
+      requestAnimationFrame(loop);
+    }
+
+    resetScene();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
