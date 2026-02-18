@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Felicitación de Cumpleaños #17</title>
+  <style>
+    :root {
+      --bg-1: #0b132b;
+      --bg-2: #1c2541;
+      --glass: rgba(173, 216, 230, 0.28);
+      --text: #ffe66d;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at top, var(--bg-2), var(--bg-1));
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      color: white;
+    }
+
+    .scene {
+      width: min(920px, 96vw);
+      position: relative;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      background: linear-gradient(#12203a 0 68%, #265d2a 68% 100%);
+    }
+
+    .message {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      font-size: clamp(1.6rem, 5vw, 3.2rem);
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: var(--text);
+      text-shadow: 0 4px 10px rgba(0, 0, 0, 0.55);
+      opacity: 0;
+      transform: scale(0.85);
+      transition: opacity 600ms ease, transform 600ms ease;
+      padding: 1rem;
+      pointer-events: none;
+    }
+
+    .message.show {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .hint {
+      position: absolute;
+      left: 14px;
+      bottom: 10px;
+      font-size: 0.85rem;
+      opacity: 0.8;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 0.25rem 0.45rem;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="scene">
+    <canvas id="birthdayCanvas" width="920" height="520" aria-label="Animación de cumpleaños"></canvas>
+    <div id="birthdayMessage" class="message">Feliz Cumpleaños #17 mi negrito</div>
+    <div class="hint">La animación se repite automáticamente.</div>
+  </div>
+
+  <script>
+    // ===== Configuración básica =====
+    const canvas = document.getElementById("birthdayCanvas");
+    const ctx = canvas.getContext("2d");
+    const message = document.getElementById("birthdayMessage");
+
+    // Estado de la animación
+    const state = {
+      phase: "preHit", // preHit -> swing -> hit -> broken -> done
+      elapsed: 0,
+      swingTimer: 0,
+      brokenTime: 0,
+      showMessage: false
+    };
+
+    // Pelota
+    const ball = {
+      x: 470,
+      y: 330,
+      r: 12,
+      vx: -45, // se acerca al bateador lentamente
+      vy: 0,
+      hit: false
+    };
+
+    // Bate (ángulo en radianes)
+    const bat = {
+      pivotX: 250,
+      pivotY: 287,
+      angle: -0.85
+    };
+
+    // Pared de vidrio
+    const glass = {
+      x: 680,
+      y: 140,
+      w: 170,
+      h: 240,
+      broken: false,
+      cracks: [],
+      fragments: []
+    };
+
+    function resetScene() {
+      state.phase = "preHit";
+      state.elapsed = 0;
+      state.swingTimer = 0;
+      state.brokenTime = 0;
+      state.showMessage = false;
+
+      ball.x = 470;
+      ball.y = 330;
+      ball.vx = -45;
+      ball.vy = 0;
+      ball.hit = false;
+
+      bat.angle = -0.85;
+      glass.broken = false;
+      glass.cracks = [];
+      glass.fragments = [];
+      message.classList.remove("show");
+    }
+
+    function drawField() {
+      // Línea del suelo
+      ctx.strokeStyle = "rgba(255,255,255,0.35)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, 355);
+      ctx.lineTo(canvas.width, 355);
+      ctx.stroke();
+    }
+
+    function drawPlayer() {
+      const x = 220;
+      const y = 345;
+
+      // Cabeza
+      ctx.fillStyle = "#ffd4a3";
+      ctx.beginPath();
+      ctx.arc(x, y - 130, 24, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Gorra
+      ctx.fillStyle = "#e63946";
+      ctx.fillRect(x - 24, y - 154, 48, 12);
+      ctx.fillRect(x + 18, y - 146, 18, 6);
+
+      // Cuerpo
+      ctx.strokeStyle = "#f1faee";
+      ctx.lineWidth = 9;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(x, y - 105);
+      ctx.lineTo(x, y - 35);
+      ctx.stroke();
+
+      // Piernas
+      ctx.beginPath();
+      ctx.moveTo(x, y - 35);
+      ctx.lineTo(x - 26, y + 18);
+      ctx.moveTo(x, y - 35);
+      ctx.lineTo(x + 30, y + 14);
+      ctx.stroke();
+
+      // Brazo delantero fijo
+      ctx.beginPath();
+      ctx.moveTo(x, y - 88);
+      ctx.lineTo(x + 35, y - 67);
+      ctx.stroke();
+
+      // Brazo trasero que conecta con el bate
+      ctx.beginPath();
+      ctx.moveTo(x, y - 90);
+      ctx.lineTo(bat.pivotX, bat.pivotY);
+      ctx.stroke();
+
+      drawBat();
+    }
+
+    function drawBat() {
+      // Se dibuja con transformación para rotar alrededor del pivote
+      ctx.save();
+      ctx.translate(bat.pivotX, bat.pivotY);
+      ctx.rotate(bat.angle);
+      ctx.fillStyle = "#b88a4a";
+      ctx.fillRect(0, -6, 118, 12);
+
+      // Cinta del mango
+      ctx.fillStyle = "#111";
+      ctx.fillRect(0, -7, 18, 14);
+      ctx.restore();
+    }
+
+    function drawBall() {
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Costuras simples
+      ctx.strokeStyle = "#d62828";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(ball.x - 3, ball.y, 5, -1.2, 1.2);
+      ctx.moveTo(ball.x + 3, ball.y - 5);
+      ctx.arc(ball.x + 3, ball.y, 5, 1.9, 4.3);
+      ctx.stroke();
+    }
+
+    function drawGlass() {
+      if (!glass.broken) {
+        // Vidrio intacto
+        ctx.fillStyle = "rgba(173, 216, 230, 0.26)";
+        ctx.fillRect(glass.x, glass.y, glass.w, glass.h);
+        ctx.strokeStyle = "rgba(200, 240, 255, 0.8)";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(glass.x, glass.y, glass.w, glass.h);
+      } else {
+        // Marco después de romperse
+        ctx.strokeStyle = "rgba(200, 240, 255, 0.85)";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(glass.x, glass.y, glass.w, glass.h);
+
+        // Grietas
+        ctx.strokeStyle = "rgba(210, 240, 255, 0.95)";
+        ctx.lineWidth = 1.8;
+        glass.cracks.forEach((line) => {
+          ctx.beginPath();
+          ctx.moveTo(line.x1, line.y1);
+          ctx.lineTo(line.x2, line.y2);
+          ctx.stroke();
+        });
+
+        // Fragmentos cayendo
+        glass.fragments.forEach((p) => {
+          ctx.fillStyle = "rgba(190, 235, 255, 0.6)";
+          ctx.fillRect(p.x, p.y, p.size, p.size);
+        });
+      }
+    }
+
+    function breakGlass(hitX, hitY) {
+      glass.broken = true;
+
+      // Genera grietas radiales simples
+      for (let i = 0; i < 14; i++) {
+        const a = (Math.PI * 2 * i) / 14;
+        const len = 28 + Math.random() * 90;
+        glass.cracks.push({
+          x1: hitX,
+          y1: hitY,
+          x2: hitX + Math.cos(a) * len,
+          y2: hitY + Math.sin(a) * len
+        });
+      }
+
+      // Genera “fragmentos” que caen
+      for (let i = 0; i < 34; i++) {
+        glass.fragments.push({
+          x: glass.x + Math.random() * glass.w,
+          y: glass.y + Math.random() * glass.h,
+          vy: 55 + Math.random() * 130,
+          vx: (Math.random() - 0.5) * 45,
+          size: 3 + Math.random() * 5
+        });
+      }
+    }
+
+    function update(dt) {
+      state.elapsed += dt;
+
+      // 1) Antes del batazo: pelota se acerca al jugador
+      if (state.phase === "preHit") {
+        ball.x += ball.vx * dt;
+
+        if (state.elapsed > 1.7) {
+          state.phase = "swing";
+        }
+      }
+
+      // 2) Swing del bate
+      if (state.phase === "swing") {
+        state.swingTimer += dt;
+
+        // Interpolación de ángulo para un movimiento sencillo
+        const t = Math.min(state.swingTimer / 0.5, 1);
+        bat.angle = -0.85 + t * 1.55;
+
+        // Momento del contacto
+        if (!ball.hit && t > 0.42) {
+          ball.hit = true;
+          ball.vx = 260;
+          ball.vy = -120;
+          state.phase = "hit";
+        }
+      }
+
+      // 3) Pelota bateada viaja hacia el vidrio
+      if (state.phase === "hit") {
+        ball.x += ball.vx * dt;
+        ball.y += ball.vy * dt;
+        ball.vy += 120 * dt; // gravedad suave
+
+        const insideGlass =
+          ball.x + ball.r >= glass.x &&
+          ball.x - ball.r <= glass.x + glass.w &&
+          ball.y + ball.r >= glass.y &&
+          ball.y - ball.r <= glass.y + glass.h;
+
+        if (insideGlass && !glass.broken) {
+          breakGlass(ball.x, ball.y);
+          state.phase = "broken";
+        }
+      }
+
+      // 4) Tras romper el vidrio aparecen los fragmentos y el mensaje
+      if (state.phase === "broken") {
+        state.brokenTime += dt;
+
+        glass.fragments.forEach((p) => {
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.vy += 130 * dt;
+        });
+
+        if (state.brokenTime > 0.5 && !state.showMessage) {
+          state.showMessage = true;
+          message.classList.add("show");
+        }
+
+        // Reinicia para repetir la felicitación
+        if (state.brokenTime > 3.5) {
+          resetScene();
+        }
+      }
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawField();
+      drawPlayer();
+      drawGlass();
+      drawBall();
+    }
+
+    let last = performance.now();
+    function loop(now) {
+      const dt = Math.min((now - last) / 1000, 0.033);
+      last = now;
+      update(dt);
+      render();
+      requestAnimationFrame(loop);
+    }
+
+    resetScene();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
